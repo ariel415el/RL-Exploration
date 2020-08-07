@@ -1,0 +1,14 @@
+SEED = 0
+TRAIN_ROOT = "NEW_TRAINING"
+SCORE_SCOPE = 100
+LOG_FREQUENCY = 50
+CKP_STEP=0.2
+TEMPORAL_FREQ=60*30 # every 30 minutes
+ENV_NAME='BreakoutNoFrameskip-v4'
+# LOGGER_TYPE='tensorboard'
+LOGGER_TYPE='plt'
+TRAIN=False
+WEIGHTS_FILE=None
+
+if not TRAIN:
+    TEST_EPISODES=3
