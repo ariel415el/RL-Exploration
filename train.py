@@ -45,9 +45,14 @@ class train_progress_manager(object):
 
         return save_path
 
+    def report_test(self, test_score):
+        self.logger.add_costume_log("Test-score", self.episodes_done, test_score)
 
-def train_agent_multi_env(env_builder, agent, progress_manager):
+
+def train_agent_multi_env(env_builder, agent, progress_manager, test_frequency, save_videos):
     """Train agent that can train with multiEnv objects"""
+    agent.initialize_normalizers(env_builder)
+
     multi_env = MultiEnviroment(env_builder, agent.hp['concurrent_epsiodes'])
     total_scores = [0 for _ in range(agent.hp['concurrent_epsiodes'])]
     total_lengths = [0 for _ in range(agent.hp['concurrent_epsiodes'])]
@@ -55,7 +60,8 @@ def train_agent_multi_env(env_builder, agent, progress_manager):
     while not progress_manager.training_complete:
         actions = agent.process_states(states)
         next_states, rewards, is_next_state_terminals, infos = multi_env.step(actions)
-        agent.update_step_results(next_states, rewards, is_next_state_terminals)
+        i_reward = agent.exploration_module.compute_intrinsic_reward(states, next_states, actions)
+        agent.update_step_results(next_states, rewards, i_reward, is_next_state_terminals)
         states = next_states
 
         for i, (reward, done) in enumerate(zip(rewards, is_next_state_terminals)):
@@ -67,6 +73,17 @@ def train_agent_multi_env(env_builder, agent, progress_manager):
                     agent.save_state(save_path)
                 total_scores[i] = 0
                 total_lengths[i] = 0
+
+                if (progress_manager.episodes_done + 1) % test_frequency == 0:
+                    test_env = env_builder(test_config=True)
+                    if save_videos:
+                        test_env = gym.wrappers.Monitor(test_env, os.path.join(progress_manager.videos_dir, "test_%d" % (
+                                    progress_manager.episodes_done + 1)), video_callable=lambda episode_id: True,
+                                                        force=True)
+                    test_score = test(test_env, agent, 1)
+
+                    progress_manager.report_test(test_score)
+                    test_env.close()
 
     multi_env.close()
 

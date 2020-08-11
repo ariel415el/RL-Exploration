@@ -5,9 +5,11 @@ LOG_FREQUENCY = 50
 CKP_STEP=0.2
 TEMPORAL_FREQ=60*30 # every 30 minutes
 ENV_NAME='BreakoutNoFrameskip-v4'
+TEST_FREQUENCY=200
+SAVE_VIDEOS=True
 # LOGGER_TYPE='tensorboard'
 LOGGER_TYPE='plt'
-TRAIN=False
+TRAIN=True
 WEIGHTS_FILE=None
 
 if not TRAIN:

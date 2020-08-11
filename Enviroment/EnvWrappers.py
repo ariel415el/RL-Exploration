@@ -1,5 +1,5 @@
 #####################################################################
-# Forked from https://github.com/higgsfield/RL-Adventure.git
+# Inspires from https://github.com/higgsfield/RL-Adventure.git
 #####################################################################
 import numpy as np
 from collections import deque
@@ -10,85 +10,20 @@ import cv2
 cv2.ocl.setUseOpenCL(False)
 
 
-class NoopResetEnv(gym.Wrapper):
-    def __init__(self, env, noop_max=30):
-        """Sample initial states by taking random number of no-ops on reset.
-        No-op is assumed to be action 0.
-        """
-        gym.Wrapper.__init__(self, env)
-        self.noop_max = noop_max
-        self.override_num_noops = None
-        self.noop_action = 0
-        assert env.unwrapped.get_action_meanings()[0] == 'NOOP'
-
-    def reset(self, **kwargs):
-        """ Do no-op action for a number of steps in [1, noop_max]."""
-        self.env.reset(**kwargs)
-        if self.override_num_noops is not None:
-            noops = self.override_num_noops
-        else:
-            noops = self.unwrapped.np_random.randint(1, self.noop_max + 1)  # pylint: disable=E1101
-        assert noops > 0
-        obs = None
-        for _ in range(noops):
-            obs, _, done, _ = self.env.step(self.noop_action)
-            if done:
-                obs = self.env.reset(**kwargs)
-        return obs
-
-    def step(self, ac):
-        return self.env.step(ac)
-
-
-class DisableNoOpAction(gym.Wrapper):
-    def __init__(self, env):
-        """Disalbe to possiblity to play the NOOP action in atari games"""
-        gym.Wrapper.__init__(self, env)
-
-        self.offset = 0
-        if "NOOP" == env.unwrapped.get_action_meanings()[0]:
-            self.offset = 1
-        self.action_space = spaces.Discrete(self.action_space.n - 1)
-
-    def step(self, ac):
-        return self.env.step(ac + 1)
-
-
-class FireResetEnv(gym.Wrapper):
-    def __init__(self, env):
-        """Take action on reset for environments that are fixed until firing."""
-        gym.Wrapper.__init__(self, env)
-        assert env.unwrapped.get_action_meanings()[1] == 'FIRE'
-        assert len(env.unwrapped.get_action_meanings()) >= 3
-
-    def reset(self, **kwargs):
-        self.env.reset(**kwargs)
-        obs, _, _, _ = self.env.step(1)
-        return obs
-
-    def step(self, ac):
-        return self.env.step(ac)
-
-class FireAtLostLife(gym.Wrapper):
-    """This wrapper ensures fire it the first action after each lost of life which is necessary to play the game
-        This is crucial when the training was done in episodic life with fire reset but test is on full game
+class RestrictAtariActions(gym.Wrapper):
+    """
+    Restrict atari actions to the first 5 basic actions only: 'NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'DOWN'
     """
     def __init__(self, env):
-        self.lives = 0
+        # atari_actions = ['NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'DOWN', 'UPRIGHT', 'UPLEFT', 'DOWNRIGHT', 'DOWNLEFT',
+        #                  'UPFIRE', 'RIGHTFIRE', 'LEFTFIRE', 'DOWNFIRE', 'UPRIGHTFIRE', 'UPLEFTFIRE', 'DOWNRIGHTFIRE',
+        #                  'DOWNLEFTFIRE']
+        """Disalbe to possiblity to play the NOOP action in atari games"""
         gym.Wrapper.__init__(self, env)
+        self.action_space = spaces.Discrete(5)
 
-    def step(self, action):
-        obs, reward, done, info = self.env.step(action)
-        lives = self.env.unwrapped.ale.lives()
-        if lives < self.lives:
-            obs, reward, done, info = self.env.step(1) # hit Fire
-        self.lives = lives
-        return obs, reward, done, info
-
-    def reset(self, **kwargs):
-        obs = self.env.reset(**kwargs)
-        self.lives = self.env.unwrapped.ale.lives()
-        return obs
+    def step(self, ac):
+        return self.env.step(ac)
 
 
 class EpisodicLifeEnv(gym.Wrapper):
@@ -189,7 +124,7 @@ class WarpFrame(gym.ObservationWrapper):
 
 
 class FrameStack(gym.Wrapper):
-    def __init__(self, env, k, use_lazy_frames=True):
+    def __init__(self, env, k):
         """Stack k last frames.
         Returns lazy array, which is much more memory efficient.
         See Also
@@ -198,7 +133,6 @@ class FrameStack(gym.Wrapper):
         """
         gym.Wrapper.__init__(self, env)
         self.k = k
-        self.use_lazy_frames = use_lazy_frames
         self.frames = deque([], maxlen=k)
         shp = env.observation_space.shape
         self.observation_space = spaces.Box(low=0, high=255, shape=(shp[0] * k, shp[1], shp[2]), dtype=np.uint8)
@@ -216,66 +150,64 @@ class FrameStack(gym.Wrapper):
 
     def _get_ob(self):
         assert len(self.frames) == self.k
-        # return list(self.frames)
-        if self.use_lazy_frames:
-            return LazyFrames((self.frames))
-        else:
-            return np.concatenate(self.frames, axis=0)
+        return np.concatenate(self.frames, axis=0)
+
 
 class ScaledFloatFrame(gym.ObservationWrapper):
     def __init__(self, env):
         gym.ObservationWrapper.__init__(self, env)
 
     def observation(self, observation):
-        # careful! This undoes the memory optimization, use
-        # with smaller replay buffers only.
         return np.array(observation).astype(np.float32) / 255.0
 
 
-class LazyFrames(object):
-    def __init__(self, frames):
-        """This object ensures that common frames between the observations are only stored once.
-        It exists purely to optimize memory usage which can be huge for DQN's 1M frames replay
-        buffers.
-        This object should only be converted to numpy array before being passed to the model.
-        You'd not believe how complex the previous solution was."""
-        self._frames = frames # should be a list of frames
+class FireAtLostLife(gym.Wrapper):
+    """
+        This wrapper ensures FIRE it the first action after each lost of life which is necessary to play the game
+        This is crucial when the training is done in episodic life with where there is no need to continue after lost life
+         but test is on full game
+    """
+    def __init__(self, env):
+        self.lives = 0
+        gym.Wrapper.__init__(self, env)
 
-    def __array__(self, dtype=None):
-        return np.concatenate(self._frames, axis=0)
+    def step(self, action):
+        obs, reward, done, info = self.env.step(action)
+        lives = self.env.unwrapped.ale.lives()
+        if lives < self.lives:
+            obs, reward, done, info = self.env.step(1) # hit Fire
+        self.lives = lives
+        return obs, reward, done, info
+
+    def reset(self, **kwargs):
+        obs = self.env.reset(**kwargs)
+        self.lives = self.env.unwrapped.ale.lives()
+        return obs
 
 
-def get_atari_env(env_name, episode_life=False, clip_rewards=False, frame_stack=1, use_lazy_frames=True, scale=False, no_op_reset=True, disable_noop=False):
+def get_atari_env(env_name, episode_life=False, clip_rewards=False, frame_stack=1, scale=False, simple_actions=False,
+                  fire_on_lost_life=False):
     """Stack all the wrappers relavant for Atari games in the right order
         May be problematic to chane order of wraping
     """
     env = gym.make(env_name)
-    if no_op_reset:
-        env = NoopResetEnv(env, noop_max=30)
-    if "Deterministic" in env_name:
-        pass
-    elif "NoFrameskip" in  env_name:
-        env = MaxAndSkipEnv(env, skip=4)
-    else:
-        raise Exception("Atari Enviroment should be deterministic")
+    assert "NoFrameskip" in  env_name # gym Deterministic skips frame by itself so pay attensions
+    env = MaxAndSkipEnv(env, skip=4)
     if episode_life:
         env = EpisodicLifeEnv(env)
-        if 'FIRE' in env.unwrapped.get_action_meanings():
-            env = FireResetEnv(env)
-    else:
-        if 'FIRE' in env.unwrapped.get_action_meanings():
-            env = FireAtLostLife(env)
-
+    if fire_on_lost_life:
+        env = FireAtLostLife(env)
     env = WarpFrame(env)
     if scale:
-        env = ScaledFloatFrame(env)  # Disables memory optimization
+        env = ScaledFloatFrame(env)
     if clip_rewards:
         env = ClipRewardEnv(env)
     if frame_stack:
-        env = FrameStack(env, frame_stack, use_lazy_frames)
-    if disable_noop:
-        env = DisableNoOpAction(env)
+        env = FrameStack(env, frame_stack)
+    if simple_actions:
+        env = RestrictAtariActions(env)
     return env
+
 
 def get_super_mario_env(env_name, simple_actions=True):
     from nes_py.wrappers import JoypadSpace

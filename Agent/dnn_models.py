@@ -102,11 +102,13 @@ class Critic(nn.Module):
         for layer_size in hidden_layers:
             layers += [nn.Linear(last_features_space, layer_size), activation]
             last_features_space = layer_size
-        layers += [nn.Linear(last_features_space, 1)]
         self.head = nn.Sequential(*layers)
+        self.value1 = nn.Linear(last_features_space, 1)
+        self.value2 = nn.Linear(last_features_space, 1)
 
     def get_value(self, features):
-        return self.head(features)
+        features = self.head(features)
+        return self.value1(features), self.value2(features)
 
 
 class ActorCriticModel(nn.Module):
@@ -127,5 +129,5 @@ class ActorCriticModel(nn.Module):
     def forward(self, x):
         features = self.features(x)
         dist = self.actor.get_dist(features)
-        value = self.critic.get_value(features)
-        return dist, value
+        value_e, value_i = self.critic.get_value(features)
+        return dist, value_e, value_i

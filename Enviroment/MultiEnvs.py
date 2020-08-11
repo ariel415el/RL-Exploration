@@ -19,6 +19,8 @@ class EnvProcess(Process):
                 state = self.env.reset()
             self.child_conn.send([state, reward, done, info])
 
+    def close(self):
+        self.env.close()
 
     def get_initial_state(self):
         return self.initial_state
@@ -31,6 +33,7 @@ class MultiEnviroment(object):
     def __init__(self, env_builder_instance, num_envs=1):
         self.env_builder = env_builder_instance
         self.num_envs = num_envs
+        self.action_space = self.env_builder().action_space
         self.envs = []
         self.connections = []
         for i in range(num_envs):
@@ -62,6 +65,10 @@ class MultiEnviroment(object):
             infos += [info]
 
         return np.array(states), np.array(rewards), np.array(dones), np.array(infos)
+
+    def step_random(self):
+        actions = [self.action_space.sample() for _ in self.envs]
+        return self.step(actions)
 
     def close(self):
         for env in self.envs:

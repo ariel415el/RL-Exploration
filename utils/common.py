@@ -49,8 +49,11 @@ class RunningStats(object):
         self.std = computation_module.ones(shape, dtype=float)
         self.count = epsilon
 
-    def scale(self, arr):
-        return (arr - self.mean) / self.std
+    def scale(self, arr, substract_mean=True):
+        if substract_mean:
+            return (arr - self.mean) / self.std
+        else:
+            return arr / self.std
 
     def update(self, x):
         batch_mean = x.mean(0)

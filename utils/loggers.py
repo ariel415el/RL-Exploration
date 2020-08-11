@@ -12,7 +12,6 @@ class logger(object):
     """Basic logger of training progress"""
     def __init__(self, log_frequency, logdir):
         self.logdir = logdir
-        os.makedirs(self.logdir, exist_ok=True)
         self.log_frequency = log_frequency
         self.episodes_scores = []
         self.score_scope_scores = []
@@ -23,6 +22,7 @@ class logger(object):
         self.agent_train_stats = {}
         self.agent_histograms = {}
         self.done_episodes = 0
+        os.makedirs(self.logdir, exist_ok=True)
 
     def add_costume_log(self, name, x, y):
         if name in self.agent_train_stats:
@@ -90,7 +90,8 @@ class plt_logger(logger):
     """Outputs progress with pyplot"""
     def __init__(self, log_frequency, logdir):
         super(plt_logger, self).__init__(log_frequency, logdir)
-        os.makedirs(logdir, exist_ok=True)
+        self.costum_logdir = os.path.join(self.logdir,'additional_logs')
+        os.makedirs(self.costum_logdir, exist_ok=True)
 
     def output_stats(self, actor_stats=None, by_step=False):
         super(plt_logger, self).output_stats()
@@ -114,12 +115,12 @@ class plt_logger(logger):
         plt.clf()
 
         for train_stats in self.agent_train_stats:
-            self.agent_train_stats[train_stats].plot(os.path.join(self.logdir, train_stats+".png"))
+            self.agent_train_stats[train_stats].plot(os.path.join(self.costum_logdir, train_stats+".png"))
 
         for hist_name in self.agent_histograms:
             plt.hist(self.agent_histograms[hist_name], bins='auto', label="Action histogram")
             plt.legend()
-            plt.savefig(os.path.join(self.logdir, hist_name+".png"))
+            plt.savefig(os.path.join(self.costum_logdir, hist_name+".png"))
             plt.clf()
 
 

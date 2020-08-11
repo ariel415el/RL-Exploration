@@ -6,16 +6,8 @@ from Enviroment.EnvBuilder import get_env_builder, get_env_goal
 from train import train_agent_multi_env, train_progress_manager, test
 from opt import *
 from gym import wrappers
-import gym
-
-def build_agent(env,  hp):
-    state_dim = env.observation_space.shape
-    if type(env.action_space) == gym.spaces.Discrete:
-        action_dim = env.action_space.n
-    else:
-        action_dim = [env.action_space.low, env.action_space.high]
-    agent = PPOParallel(state_dim, action_dim, hp)
-    return agent
+from ExplorationModule.RND import RND
+from ExplorationModule.DummyExploration import DummyExplorationModule
 
 
 def get_logger(logger_type, log_frequency, logdir):
@@ -36,8 +28,10 @@ if __name__ == '__main__':
 
     env_builder = get_env_builder(ENV_NAME)
     hp = get_agent_configs(ENV_NAME)
-    print(hp)
-    agent = build_agent(env_builder(), hp)
+    dummy_env = env_builder()
+    exp_module = RND(dummy_env.observation_space.shape)
+    # exp_module = DummyExplorationModule()
+    agent = PPOParallel(dummy_env.observation_space, dummy_env.action_space, exp_module, hp)
     if WEIGHTS_FILE:
         agent.load_state(WEIGHTS_FILE)
     train_dir = os.path.join(TRAIN_ROOT, ENV_NAME,  agent.name)
@@ -48,7 +42,8 @@ if __name__ == '__main__':
         progress_maneger = train_progress_manager(train_dir, get_env_goal(ENV_NAME), SCORE_SCOPE, logger,
                                                   checkpoint_steps=CKP_STEP, temporal_frequency=TEMPORAL_FREQ)
 
-        train_agent_multi_env(env_builder, agent, progress_maneger)
+        # train_agent_multi_env(env_builder, agent, progress_maneger, test_frequency=TEST_FREQUENCY, save_videos=SAVE_VIDEOS)
+        agent.train_agent(env_builder, progress_maneger, test_frequency=TEST_FREQUENCY, save_videos=SAVE_VIDEOS)
 
     else:
         # Test
