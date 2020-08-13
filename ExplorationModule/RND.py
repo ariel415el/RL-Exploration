@@ -10,9 +10,9 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 class RND(ExplorationModule):
     def __init__(self, state_dim, lr=0.001):
         super(RND, self).__init__()
-        self.predictor = dnn_models.ConvNetFeatureExtracor(state_dim, [(32, 8, 4), (64, 4, 2), (64, 3, 1), 512, 512, 512])
+        self.predictor = dnn_models.ConvNetFeatureExtracor(state_dim, [(32, 8, 4), (64, 4, 2), (64, 3, 1), 512, 512, 512]).to(device)
         with torch.no_grad():
-            self.target = dnn_models.ConvNetFeatureExtracor(state_dim, [(32, 8, 4), (64, 4, 2), (64, 3, 1), 512])
+            self.target = dnn_models.ConvNetFeatureExtracor(state_dim, [(32, 8, 4), (64, 4, 2), (64, 3, 1), 512]).to(device)
 
         self.optimizer = torch.optim.Adam(self.predictor.parameters(), lr=lr)
         self.optimizer.zero_grad()
@@ -28,9 +28,9 @@ class RND(ExplorationModule):
 
     def compute_intrinsic_reward(self, cur_states, next_states, actions):
         # Normalize states: as paper suggests its crucial for random networks
-        next_states = torch.from_numpy(next_states).to(device).float()
+        next_states = torch.from_numpy(next_states).float()
         self.state_normalizer.update(next_states)
-        next_states = self.state_normalizer.scale(next_states)
+        next_states = self.state_normalizer.scale(next_states).to(device)
         next_states = torch.clamp(next_states,-5, 5).float()
 
         # Compute intrinsic reward and optimize
@@ -42,8 +42,8 @@ class RND(ExplorationModule):
         self.reporter.add_costume_log("RND-loss", None, loss.item())
 
         # return normalized intrinsic reward
-        i_reward = intrinsic_rewards.detach()
+        i_reward = intrinsic_rewards.detach().cpu()     
         self.i_reward_normalizer.update(i_reward)
         i_reward = self.i_reward_normalizer.scale(i_reward, substract_mean=False)
-        return i_reward
+        return i_reward.to(device)
 
